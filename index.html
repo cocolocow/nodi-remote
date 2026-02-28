@@ -56,13 +56,18 @@ body{display:flex;flex-direction:column;align-items:center;justify-content:space
 </div>
 <script>
 const ICONS={btc:"₿",xmr:"⛏️",hasheur:"📺",dodo:"🌙",logo:"🟠"};
+const WSS_URL="wss://merely-veterans-charged-brochures.trycloudflare.com";
+const WS_LOCAL="ws://192.168.1.180:8765";
 let ws,screens=[],labels={},current='';
 let tx=0,ty=0;
+
 function connect(){
-  ws=new WebSocket('ws://192.168.1.180:8765');
-  ws.onopen=()=>{setStatus('connected','Connecté');send({cmd:'status'})};
-  ws.onclose=()=>{setStatus('error','Déconnecté...');setTimeout(connect,2000)};
-  ws.onerror=()=>setStatus('error','Erreur');
+  // Essaie WSS (tunnel) si HTTPS, sinon WS local
+  const url = location.protocol==='https:' ? WSS_URL : WS_LOCAL;
+  ws=new WebSocket(url);
+  ws.onopen=()=>{setStatus('connected','Connecté ✓');send({cmd:'status'})};
+  ws.onclose=()=>{setStatus('error','Déconnecté — reconnexion...');setTimeout(connect,2000)};
+  ws.onerror=()=>{setStatus('error','Erreur connexion')};
   ws.onmessage=e=>{
     const d=JSON.parse(e.data);
     if(d.type==='state'||d.type==='screen_changed'){
@@ -79,10 +84,9 @@ function updateUI(){
   document.getElementById('screen-icon').textContent=ICONS[current]||'📺';
   document.getElementById('screen-name').textContent=labels[current]||current;
   document.getElementById('screens-grid').innerHTML=screens.map(s=>
-    `<div class="screen-btn ${s===current?'active':''}" onclick="send({cmd:'switch',screen:'${s}'})">
-      <div class="sicon">${ICONS[s]||'📺'}</div>
-      <div class="slabel">${(labels[s]||s).replace(/[₿⛏️📺🌙🟠]\s*/,'')}</div>
-    </div>`
+    '<div class="screen-btn '+(s===current?'active':'')+'" onclick="send({cmd:\'switch\',screen:\''+s+'\'})">'+
+    '<div class="sicon">'+(ICONS[s]||'📺')+'</div>'+
+    '<div class="slabel">'+(labels[s]||s).replace(/[₿⛏️📺🌙🟠]\s*/,'')+'</div></div>'
   ).join('');
 }
 const z=document.getElementById('swipe-zone');
