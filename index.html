@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"/>
+<title>Nodi Remote</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none}
+:root{--bg:#050508;--card:#0f0f1a;--border:#1e1e35;--orange:#ff8c00;--text:#e8e8f0;--muted:#555580;--green:#30d080;--red:#ff4060}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,sans-serif;overflow:hidden}
+body{display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:20px;min-height:100svh}
+.header{text-align:center;padding-top:10px}
+.logo{font-size:1.4rem;font-weight:700;color:var(--orange)}
+.status{display:inline-flex;align-items:center;gap:.4rem;font-size:.75rem;color:var(--muted);margin-top:.3rem}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.dot.connected{background:var(--green);animation:pulse 2s infinite}
+.dot.error{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.now-playing{text-align:center;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.8rem}
+.screen-icon{font-size:5rem;transition:all .3s}
+.screen-name{font-size:1.5rem;font-weight:700;color:var(--orange);transition:all .3s}
+.screen-sub{font-size:.8rem;color:var(--muted)}
+.swipe-zone{width:100%;max-width:360px;height:100px;background:var(--card);border:1px solid var(--border);border-radius:24px;display:flex;align-items:center;justify-content:center;font-size:.85rem;color:var(--muted);touch-action:pan-y}
+.controls{width:100%;max-width:360px;display:flex;flex-direction:column;gap:.8rem}
+.nav-row{display:flex;gap:.8rem}
+.btn{flex:1;background:var(--card);border:1px solid var(--border);border-radius:16px;color:var(--text);font-size:1rem;font-weight:600;padding:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem}
+.btn:active{transform:scale(.96);background:rgba(255,140,0,.1);border-color:var(--orange)}
+.screens-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem}
+.screen-btn{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:.8rem .4rem;text-align:center;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:.3rem}
+.screen-btn.active{background:rgba(255,140,0,.12);border-color:var(--orange)}
+.screen-btn:active{transform:scale(.94)}
+.sicon{font-size:1.5rem}
+.slabel{font-size:.72rem;color:var(--muted);font-weight:600}
+.screen-btn.active .slabel{color:var(--orange)}
+.divider{width:40px;height:2px;background:var(--border);border-radius:1px;margin:.2rem auto}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="logo">⬡ Nodi Remote</div>
+  <div class="status"><div class="dot" id="dot"></div><span id="status-text">Connexion...</span></div>
+</div>
+<div class="now-playing">
+  <div class="screen-icon" id="screen-icon">₿</div>
+  <div class="screen-name" id="screen-name">Bitcoin</div>
+  <div class="screen-sub">Écran actuel</div>
+</div>
+<div class="swipe-zone" id="swipe-zone">← Swipe pour changer →</div>
+<div class="divider"></div>
+<div class="controls">
+  <div class="nav-row">
+    <button class="btn" onclick="send({cmd:'prev'})">◀ Précédent</button>
+    <button class="btn" onclick="send({cmd:'next'})">Suivant ▶</button>
+  </div>
+  <div class="screens-grid" id="screens-grid"></div>
+</div>
+<script>
+const ICONS={btc:"₿",xmr:"⛏️",hasheur:"📺",dodo:"🌙",logo:"🟠"};
+let ws,screens=[],labels={},current='';
+let tx=0,ty=0;
+function connect(){
+  ws=new WebSocket('ws://192.168.1.180:8765');
+  ws.onopen=()=>{setStatus('connected','Connecté');send({cmd:'status'})};
+  ws.onclose=()=>{setStatus('error','Déconnecté...');setTimeout(connect,2000)};
+  ws.onerror=()=>setStatus('error','Erreur');
+  ws.onmessage=e=>{
+    const d=JSON.parse(e.data);
+    if(d.type==='state'||d.type==='screen_changed'){
+      current=d.screen;
+      if(d.screens)screens=d.screens;
+      if(d.labels)labels=d.labels;
+      updateUI();
+    }
+  };
+}
+function send(d){if(ws&&ws.readyState===1)ws.send(JSON.stringify(d));}
+function setStatus(s,t){document.getElementById('dot').className='dot '+s;document.getElementById('status-text').textContent=t;}
+function updateUI(){
+  document.getElementById('screen-icon').textContent=ICONS[current]||'📺';
+  document.getElementById('screen-name').textContent=labels[current]||current;
+  document.getElementById('screens-grid').innerHTML=screens.map(s=>
+    `<div class="screen-btn ${s===current?'active':''}" onclick="send({cmd:'switch',screen:'${s}'})">
+      <div class="sicon">${ICONS[s]||'📺'}</div>
+      <div class="slabel">${(labels[s]||s).replace(/[₿⛏️📺🌙🟠]\s*/,'')}</div>
+    </div>`
+  ).join('');
+}
+const z=document.getElementById('swipe-zone');
+z.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
+z.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-tx,dy=Math.abs(e.changedTouches[0].clientY-ty);
+  if(Math.abs(dx)>50&&dy<60){dx<0?send({cmd:'next'}):send({cmd:'prev'});}
+},{passive:true});
+connect();
+</script>
+</body>
+</html>
